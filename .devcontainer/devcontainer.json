@@ -1,0 +1,38 @@
+{
+  "name": "Work IQ Daily Workflow",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "installDirectlyFromGitHubRelease": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "PeterMEFrandsen.gh-aw-inspector",
+        "ms-vscode.vscode-github-issue-notebooks"
+      ],
+      "settings": {
+        "github.copilot.enable": {
+          "*": true
+        },
+        "chat.agent.enabled": true
+      }
+    },
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteEnv": {
+    "WORKIQ_AUTO_ACCEPT_EULA": "true"
+  }
+}
