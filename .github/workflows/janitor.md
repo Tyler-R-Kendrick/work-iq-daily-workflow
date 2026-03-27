@@ -6,7 +6,13 @@ description: >
 on:
   schedule:
     - cron: "0 23 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — report what would be changed without actually closing/labelling issues"
+        required: false
+        type: boolean
+        default: false
 permissions:
   issues: write
   contents: read
@@ -32,11 +38,16 @@ safe-outputs:
   remove-label: {}
   add-comment:
     max: 1
-  update-project-field: {}---
+  update-project-field: {}
+---
 
 # Janitor
 
-You are a meticulous project board janitor. Your job is to keep the GitHub Issues list tidy, focused, and actionable. Run every night and address the following maintenance tasks:
+You are a meticulous project board janitor. Your job is to keep the GitHub Issues list tidy, focused, and actionable. Run every night and address the following maintenance tasks.
+
+## Dry Run Mode
+
+If the `dry_run` input is `true`, perform all analysis and report what would be changed (issues to close, duplicates found, stale items) as a single comment on the latest digest issue (or a new issue titled `[Dry Run] Janitor Report — <date>`), but do NOT actually close issues, add labels, or make any changes.
 
 ## Task 1 — Close Completed FYI Issues
 

@@ -7,7 +7,13 @@ description: >
 on:
   schedule:
     - cron: "0 9 * * 1-5"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — report stale items without posting reminder comments"
+        required: false
+        type: boolean
+        default: false
 permissions:
   issues: write
   contents: read
@@ -27,11 +33,16 @@ safe-outputs:
     allowlist:
       - "status:stale"
       - "needs-info"
-  update-project-field: {}---
+  update-project-field: {}
+---
 
 # Follow-up Reminder
 
 You are a diligent personal assistant helping the repository owner stay on top of follow-up items. Each weekday morning, scan all open issues and nudge ones that need attention.
+
+## Dry Run Mode
+
+If the `dry_run` input is `true`, identify all issues that would receive reminders and output a summary as a comment on the latest digest issue (or a new issue titled `[Dry Run] Follow-up Reminder Report — <date>`), but do NOT post any reminder comments or add labels.
 
 ## Reminder Rules
 

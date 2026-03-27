@@ -1,0 +1,193 @@
+name: Validate Agentic Workflows
+
+on:
+  push:
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/validate-workflows.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/validate-workflows.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate-frontmatter:
+    name: Validate workflow frontmatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install js-yaml for YAML parsing
+        run: npm install -g js-yaml
+
+      - name: Validate all workflow .md frontmatter
+        run: |
+          set -euo pipefail
+          FAILED=0
+
+          REQUIRED_FIELDS=("name" "on" "permissions" "tools" "safe-outputs")
+          WORKFLOW_FILES=$(find .github/workflows -name "*.md" | sort)
+
+          for f in $WORKFLOW_FILES; do
+            echo "── Checking: $f"
+
+            # Extract YAML frontmatter between first and second ---
+            FRONTMATTER=$(awk '/^---$/{n++; if(n==2) exit; next} n==1' "$f")
+
+            if [ -z "$FRONTMATTER" ]; then
+              echo "  ❌ FAIL: No YAML frontmatter found"
+              FAILED=1
+              continue
+            fi
+
+            # Validate frontmatter is valid YAML
+            if ! echo "$FRONTMATTER" | node -e "
+              const yaml = require('js-yaml');
+              let data = '';
+              process.stdin.on('data', d => data += d);
+              process.stdin.on('end', () => {
+                try { yaml.load(data); process.exit(0); }
+                catch(e) { console.error('  ❌ YAML parse error:', e.message); process.exit(1); }
+              });
+            "; then
+              FAILED=1
+              continue
+            fi
+
+            # Parse and check required fields
+            node -e "
+              const yaml = require('js-yaml');
+              const fs = require('fs');
+              const content = fs.readFileSync('$f', 'utf8');
+              const match = content.match(/^---\n([\s\S]*?)\n---/);
+              if (!match) { console.error('  ❌ Could not parse frontmatter'); process.exit(1); }
+              const data = yaml.load(match[1]);
+              const required = ['name', 'on', 'permissions', 'tools', 'safe-outputs'];
+              let ok = true;
+              for (const field of required) {
+                if (!data[field]) {
+                  console.error('  ❌ Missing required field:', field);
+                  ok = false;
+                }
+              }
+              // Check workflow_dispatch is in 'on' triggers
+              const triggers = data['on'];
+              if (typeof triggers === 'object' && !triggers['workflow_dispatch']) {
+                console.error('  ❌ Missing workflow_dispatch trigger');
+                ok = false;
+              }
+              if (ok) { console.log('  ✅ Valid'); }
+              process.exit(ok ? 0 : 1);
+            " || FAILED=1
+
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo ""
+            echo "❌ One or more workflow files failed validation."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All workflow files passed validation."
+
+  validate-labels:
+    name: Validate label consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install js-yaml
+        run: npm install -g js-yaml
+
+      - name: Check all safe-output labels are in the setup script
+        run: |
+          set -euo pipefail
+
+          # Extract all label values used in safe-outputs across all workflow files
+          USED_LABELS=$(node -e "
+            const yaml = require('js-yaml');
+            const fs = require('fs');
+            const path = require('path');
+            const glob = require('fs');
+
+            const files = fs.readdirSync('.github/workflows').filter(f => f.endsWith('.md'));
+            const labels = new Set();
+
+            for (const file of files) {
+              const content = fs.readFileSync(path.join('.github/workflows', file), 'utf8');
+              const match = content.match(/^---\n([\s\S]*?)\n---/);
+              if (!match) continue;
+              const data = yaml.load(match[1]);
+              const so = data['safe-outputs'];
+              if (!so) continue;
+              for (const [, val] of Object.entries(so)) {
+                const allowlist = val?.allowlist || val?.['label-allowlist'];
+                if (Array.isArray(allowlist)) allowlist.forEach(l => labels.add(l));
+              }
+            }
+            console.log([...labels].sort().join('\n'));
+          ")
+
+          echo "Labels referenced in workflow safe-outputs:"
+          echo "$USED_LABELS"
+          echo ""
+
+          # Check each label exists in README (label creation section)
+          MISSING=0
+          while IFS= read -r label; do
+            if ! grep -q "\"${label}\"" README.md; then
+              echo "⚠️  Label '${label}' used in safe-outputs but not found in README label setup"
+              MISSING=1
+            fi
+          done <<< "$USED_LABELS"
+
+          if [ $MISSING -eq 0 ]; then
+            echo "✅ All labels are documented in README."
+          fi
+          # This is a warning only, not a hard failure
+          exit 0
+
+  validate-secrets:
+    name: Validate secrets documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets are documented in README and devcontainer.json
+        run: |
+          set -euo pipefail
+          FAILED=0
+
+          SECRETS=("WORKIQ_TENANT_ID" "WORKIQ_CLIENT_ID" "WORKIQ_REFRESH_TOKEN" "PROJECT_NUMBER")
+
+          for secret in "${SECRETS[@]}"; do
+            echo "Checking: $secret"
+
+            if ! grep -q "$secret" README.md; then
+              echo "  ❌ '$secret' not found in README.md"
+              FAILED=1
+            else
+              echo "  ✅ Found in README.md"
+            fi
+
+            if ! grep -q "$secret" .devcontainer/devcontainer.json; then
+              echo "  ❌ '$secret' not found in .devcontainer/devcontainer.json"
+              FAILED=1
+            else
+              echo "  ✅ Found in devcontainer.json"
+            fi
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo ""
+            echo "❌ Secret documentation is incomplete."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All secrets are documented."

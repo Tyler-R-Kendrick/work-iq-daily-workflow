@@ -54,7 +54,8 @@ safe-outputs:
       - "needs-info"
   add-comment:
     max: 1
-  update-project-field: {}---
+  update-project-field: {}
+---
 
 # Issue Triage
 

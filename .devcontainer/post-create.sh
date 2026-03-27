@@ -11,7 +11,7 @@ gh extension install github/gh-aw
 echo "==> Installing Work IQ CLI (@microsoft/workiq)..."
 npm install -g @microsoft/workiq
 
-# Accept Work IQ EULA non-interactively (set WORKIQ_AUTO_ACCEPT_EULA=true in env, or run manually)
+# Accept Work IQ EULA non-interactively
 if [ "${WORKIQ_AUTO_ACCEPT_EULA:-false}" = "true" ]; then
   workiq accept-eula || true
 fi
@@ -26,9 +26,28 @@ fi
 echo ""
 echo "==> Setup complete!"
 echo ""
-echo "Next steps:"
-echo "  1. Authenticate with GitHub:  gh auth login"
-echo "  2. Authenticate with Work IQ: workiq login"
-echo "  3. Compile agentic workflows: gh aw compile --all"
-echo "  4. See available workflows:   gh aw list"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " Next steps:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  1. Authenticate with GitHub:"
+echo "       gh auth login"
+echo ""
+echo "  2. Authenticate with Work IQ (interactive — required once):"
+echo "       workiq login"
+echo ""
+echo "     After login, extract your refresh token for use in CI:"
+echo "       cat ~/.workiq/config.json | grep -i refresh"
+echo "     Then add it as a GitHub secret named WORKIQ_REFRESH_TOKEN."
+echo "     See README.md#obtaining-a-workiq-refresh-token for full instructions."
+echo ""
+echo "  3. Compile agentic workflows (.md → .lock.yml):"
+echo "       gh aw init"
+echo "       gh aw compile --all"
+echo ""
+echo "  4. See available workflows:"
+echo "       gh aw list"
+echo ""
+echo "  5. Test a workflow in isolation (no side effects):"
+echo "       gh aw trial .github/workflows/issue-triage.md"
 echo ""

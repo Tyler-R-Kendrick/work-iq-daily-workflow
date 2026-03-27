@@ -7,7 +7,12 @@ description: >
 on:
   schedule:
     - cron: "30 7 * * 1-5"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      date_override:
+        description: "Override today's date for testing (YYYY-MM-DD format)"
+        required: false
+        type: string
 permissions:
   issues: write
   contents: read
@@ -26,11 +31,16 @@ safe-outputs:
       - "type:fyi"
       - "digest"
   add-comment:
-    max: 1---
+    max: 1
+---
 
 # Daily Digest
 
 You are a personal productivity assistant. Each weekday morning (after the Daily Task Creator has run), create a daily digest issue that gives the repository owner a concise, prioritised overview of their day.
+
+## Date Override
+
+If the `date_override` input is provided (format: `YYYY-MM-DD`), use that as "today's date" for all calculations (digest title, due-date comparisons, etc.). This is useful for testing and backfilling missed days.
 
 ## Digest Issue Format
 

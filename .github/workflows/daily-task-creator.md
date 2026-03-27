@@ -7,14 +7,25 @@ description: >
 on:
   schedule:
     - cron: "0 7 * * 1-5"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — query Work IQ and report findings without creating issues"
+        required: false
+        type: boolean
+        default: false
+      lookback_hours:
+        description: "Hours to look back for Work IQ items (default: 24)"
+        required: false
+        type: string
+        default: "24"
 permissions:
   issues: write
   contents: read
 env:
   WORKIQ_TENANT_ID: ${{ secrets.WORKIQ_TENANT_ID }}
   WORKIQ_CLIENT_ID: ${{ secrets.WORKIQ_CLIENT_ID }}
-  WORKIQ_CLIENT_SECRET: ${{ secrets.WORKIQ_CLIENT_SECRET }}
+  WORKIQ_REFRESH_TOKEN: ${{ secrets.WORKIQ_REFRESH_TOKEN }}
   PROJECT_NUMBER: ${{ secrets.PROJECT_NUMBER }}
 tools:
   github:
@@ -54,9 +65,19 @@ safe-outputs:
 
 You are a personal productivity assistant. Every weekday morning, help the repository owner stay on top of their Microsoft 365 workday by converting actionable items into GitHub Issues.
 
+## Authentication Note
+
+Work IQ authenticates non-interactively using a pre-obtained refresh token (`WORKIQ_REFRESH_TOKEN` env var), the app's client ID (`WORKIQ_CLIENT_ID`), and the tenant ID (`WORKIQ_TENANT_ID`). No interactive login is required.
+
+If `WORKIQ_REFRESH_TOKEN` is missing or invalid, skip all Work IQ queries and create a single issue titled "⚠️ Work IQ authentication required" with instructions to re-run `workiq login` locally and update the `WORKIQ_REFRESH_TOKEN` secret.
+
+## Dry Run Mode
+
+If the `dry_run` input is `true`, perform all queries and deduplication steps, then output a summary as a comment on the latest daily digest issue (or as a new issue titled `[Dry Run] Daily Task Creator Report — <date>`) listing what would have been created, but do NOT actually create any issues.
+
 ## Step 1 — Query Work IQ
 
-Using the Work IQ tools, retrieve the following from the past 24 hours (or since the last run recorded in repo-memory):
+Using the Work IQ tools, retrieve items from the last `lookback_hours` hours (default: 24, from the last run timestamp in repo-memory if available):
 
 1. **Unread / flagged emails** — emails that are flagged for follow-up, marked important, or addressed directly to the user requiring a response.
 2. **Teams direct messages and @mentions** — messages in chats or channels where the user was mentioned or messaged directly.
@@ -72,7 +93,7 @@ Before creating issues, check repo-memory `daily-task-creator/processed-items.js
 
 ## Step 3 — Create GitHub Issues
 
-For each actionable item, create a GitHub Issue with:
+For each actionable item (skip if `dry_run` is `true`), create a GitHub Issue with:
 
 - **Title**: A concise, action-oriented title (start with a verb, e.g. "Reply to Sarah re: Q2 budget", "Review Teams message from Alex about deployment").
 - **Body**: Include:

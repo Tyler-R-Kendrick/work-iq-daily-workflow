@@ -10,6 +10,24 @@
       "version": "lts"
     }
   },
+  "secrets": {
+    "WORKIQ_TENANT_ID": {
+      "description": "Your Microsoft 365 tenant ID (Azure AD Directory ID). Found in Entra ID → Overview.",
+      "documentationUrl": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/workiq-overview"
+    },
+    "WORKIQ_CLIENT_ID": {
+      "description": "Work IQ app registration client ID. Found in Entra ID → App registrations → your Work IQ app → Application (client) ID.",
+      "documentationUrl": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/workiq-overview"
+    },
+    "WORKIQ_REFRESH_TOKEN": {
+      "description": "OAuth 2.0 refresh token for non-interactive Work IQ access. Obtain by running 'workiq login' locally, then extract from ~/.workiq/config.json. See README for full instructions.",
+      "documentationUrl": "https://github.com/Tyler-R-Kendrick/work-iq-daily-workflow#obtaining-a-workiq-refresh-token"
+    },
+    "PROJECT_NUMBER": {
+      "description": "GitHub Project number for this repository. Found in the project URL: github.com/users/<user>/projects/<number>.",
+      "documentationUrl": "https://docs.github.com/en/issues/planning-and-tracking-with-projects/creating-projects/creating-a-project"
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [

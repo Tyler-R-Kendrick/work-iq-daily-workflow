@@ -39,7 +39,8 @@ safe-outputs:
       - "priority:high"
       - "priority:medium"
       - "priority:low"
-  add-comment: {}---
+  add-comment: {}
+---
 
 # Meeting Action Items
 

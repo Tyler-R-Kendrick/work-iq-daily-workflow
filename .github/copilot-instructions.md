@@ -17,7 +17,7 @@ Complementary workflows:
 
 ## Repository Conventions
 
-- **Work IQ source data** is queried at runtime via the `workiq` CLI inside the GitHub Actions runner (credentials provided via repository secrets `WORKIQ_TENANT_ID`, `WORKIQ_CLIENT_ID`, `WORKIQ_CLIENT_SECRET`).
+- **Work IQ source data** is queried at runtime via the `workiq` CLI inside the GitHub Actions runner (credentials provided via repository secrets `WORKIQ_TENANT_ID`, `WORKIQ_CLIENT_ID`, `WORKIQ_REFRESH_TOKEN`).
 - All agentic workflow source files live in `.github/workflows/*.md`; compiled versions are `*.lock.yml` in the same directory.
 - **Labels used:**
   - `source:email`, `source:teams`, `source:meeting`, `source:followup` — origin of the task
@@ -31,10 +31,12 @@ Complementary workflows:
 
 | Secret | Description |
 |---|---|
-| `WORKIQ_TENANT_ID` | Microsoft 365 tenant ID |
-| `WORKIQ_CLIENT_ID` | App registration client ID for Work IQ |
-| `WORKIQ_CLIENT_SECRET` | App registration client secret |
+| `WORKIQ_TENANT_ID` | Microsoft 365 tenant ID (Azure AD Directory ID) |
+| `WORKIQ_CLIENT_ID` | Work IQ app registration client ID |
+| `WORKIQ_REFRESH_TOKEN` | OAuth 2.0 refresh token (obtained via `workiq login`; see README) |
 | `PROJECT_NUMBER` | GitHub Project number for this repo |
+
+> **Note on WorkIQ auth**: The Work IQ CLI uses delegated (user-based) OAuth authentication. Non-interactive CI auth is achieved by pre-seeding a `WORKIQ_REFRESH_TOKEN` obtained from a one-time `workiq login`. Service principal auth is not yet supported (tracked in [microsoft/work-iq#77](https://github.com/microsoft/work-iq/issues/77)).
 
 ## Development Workflow
 
