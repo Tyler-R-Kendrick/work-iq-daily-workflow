@@ -158,6 +158,7 @@ gh label create "effort:large"  --color "e4e669" --description "> 2 hours"
 # Status labels
 gh label create "status:stale"     --color "cccccc" --description "No recent activity"
 gh label create "status:duplicate" --color "cccccc" --description "Duplicate of another issue"
+gh label create "status:wont-do"   --color "eeeeee" --description "Closed without action"
 gh label create "needs-info"       --color "d876e3" --description "More information needed"
 gh label create "digest"           --color "bfd4f2" --description "Daily digest issue"
 ```

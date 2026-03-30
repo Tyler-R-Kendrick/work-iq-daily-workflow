@@ -21,68 +21,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install js-yaml for YAML parsing
-        run: npm install -g js-yaml
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
 
       - name: Validate all workflow .md frontmatter
         run: |
           set -euo pipefail
           FAILED=0
 
-          REQUIRED_FIELDS=("name" "on" "permissions" "tools" "safe-outputs")
           WORKFLOW_FILES=$(find .github/workflows -name "*.md" | sort)
 
           for f in $WORKFLOW_FILES; do
             echo "── Checking: $f"
 
-            # Extract YAML frontmatter between first and second ---
-            FRONTMATTER=$(awk '/^---$/{n++; if(n==2) exit; next} n==1' "$f")
+            python3 - "$f" <<'PYEOF'
+import sys, re, yaml
 
-            if [ -z "$FRONTMATTER" ]; then
-              echo "  ❌ FAIL: No YAML frontmatter found"
-              FAILED=1
-              continue
-            fi
+filepath = sys.argv[1]
+content = open(filepath).read()
 
-            # Validate frontmatter is valid YAML
-            if ! echo "$FRONTMATTER" | node -e "
-              const yaml = require('js-yaml');
-              let data = '';
-              process.stdin.on('data', d => data += d);
-              process.stdin.on('end', () => {
-                try { yaml.load(data); process.exit(0); }
-                catch(e) { console.error('  ❌ YAML parse error:', e.message); process.exit(1); }
-              });
-            "; then
-              FAILED=1
-              continue
-            fi
+# Extract YAML frontmatter between first and second ---
+match = re.match(r'^---\n([\s\S]*?)\n---', content)
+if not match:
+    print("  ❌ FAIL: No YAML frontmatter found")
+    sys.exit(1)
 
-            # Parse and check required fields
-            node -e "
-              const yaml = require('js-yaml');
-              const fs = require('fs');
-              const content = fs.readFileSync('$f', 'utf8');
-              const match = content.match(/^---\n([\s\S]*?)\n---/);
-              if (!match) { console.error('  ❌ Could not parse frontmatter'); process.exit(1); }
-              const data = yaml.load(match[1]);
-              const required = ['name', 'on', 'permissions', 'tools', 'safe-outputs'];
-              let ok = true;
-              for (const field of required) {
-                if (!data[field]) {
-                  console.error('  ❌ Missing required field:', field);
-                  ok = false;
-                }
-              }
-              // Check workflow_dispatch is in 'on' triggers
-              const triggers = data['on'];
-              if (typeof triggers === 'object' && !triggers['workflow_dispatch']) {
-                console.error('  ❌ Missing workflow_dispatch trigger');
-                ok = false;
-              }
-              if (ok) { console.log('  ✅ Valid'); }
-              process.exit(ok ? 0 : 1);
-            " || FAILED=1
+try:
+    data = yaml.safe_load(match.group(1))
+except yaml.YAMLError as e:
+    print(f"  ❌ YAML parse error: {e}")
+    sys.exit(1)
+
+# In PyYAML safe_load, the YAML key 'on' is parsed as boolean True
+# We check for 'name', True (=on), 'permissions', 'tools', 'safe-outputs'
+REQUIRED = ['name', True, 'permissions', 'tools', 'safe-outputs']
+REQUIRED_NAMES = {'name': 'name', True: 'on', 'permissions': 'permissions',
+                  'tools': 'tools', 'safe-outputs': 'safe-outputs'}
+ok = True
+for field in REQUIRED:
+    if not data.get(field):
+        print(f"  ❌ Missing required field: {REQUIRED_NAMES[field]}")
+        ok = False
+
+# Check workflow_dispatch is in 'on' triggers (key True in parsed data)
+triggers = data.get(True, {})
+if isinstance(triggers, dict) and 'workflow_dispatch' not in triggers:
+    print("  ❌ Missing workflow_dispatch trigger")
+    ok = False
+
+if ok:
+    print("  ✅ Valid")
+sys.exit(0 if ok else 1)
+PYEOF
+            if [ $? -ne 0 ]; then FAILED=1; fi
 
           done
 
@@ -101,37 +92,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install js-yaml
-        run: npm install -g js-yaml
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
 
       - name: Check all safe-output labels are in the setup script
         run: |
           set -euo pipefail
 
-          # Extract all label values used in safe-outputs across all workflow files
-          USED_LABELS=$(node -e "
-            const yaml = require('js-yaml');
-            const fs = require('fs');
-            const path = require('path');
-            const glob = require('fs');
+          USED_LABELS=$(python3 - <<'PYEOF'
+import os, re, yaml
 
-            const files = fs.readdirSync('.github/workflows').filter(f => f.endsWith('.md'));
-            const labels = new Set();
+labels = set()
+for fname in sorted(os.listdir('.github/workflows')):
+    if not fname.endswith('.md'):
+        continue
+    content = open(f'.github/workflows/{fname}').read()
+    match = re.match(r'^---\n([\s\S]*?)\n---', content)
+    if not match:
+        continue
+    try:
+        data = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        continue
+    so = data.get('safe-outputs') or {}
+    for val in so.values():
+        if not isinstance(val, dict):
+            continue
+        for key in ('allowlist', 'label-allowlist'):
+            lst = val.get(key)
+            if isinstance(lst, list):
+                labels.update(lst)
 
-            for (const file of files) {
-              const content = fs.readFileSync(path.join('.github/workflows', file), 'utf8');
-              const match = content.match(/^---\n([\s\S]*?)\n---/);
-              if (!match) continue;
-              const data = yaml.load(match[1]);
-              const so = data['safe-outputs'];
-              if (!so) continue;
-              for (const [, val] of Object.entries(so)) {
-                const allowlist = val?.allowlist || val?.['label-allowlist'];
-                if (Array.isArray(allowlist)) allowlist.forEach(l => labels.add(l));
-              }
-            }
-            console.log([...labels].sort().join('\n'));
-          ")
+print('\n'.join(sorted(labels)))
+PYEOF
+)
 
           echo "Labels referenced in workflow safe-outputs:"
           echo "$USED_LABELS"
@@ -140,6 +134,7 @@ jobs:
           # Check each label exists in README (label creation section)
           MISSING=0
           while IFS= read -r label; do
+            [ -z "$label" ] && continue
             if ! grep -q "\"${label}\"" README.md; then
               echo "⚠️  Label '${label}' used in safe-outputs but not found in README label setup"
               MISSING=1
