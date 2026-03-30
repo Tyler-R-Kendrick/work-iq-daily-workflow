@@ -1,0 +1,188 @@
+name: Validate Agentic Workflows
+
+on:
+  push:
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/validate-workflows.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/*.md"
+      - ".github/workflows/validate-workflows.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate-frontmatter:
+    name: Validate workflow frontmatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
+
+      - name: Validate all workflow .md frontmatter
+        run: |
+          set -euo pipefail
+          FAILED=0
+
+          WORKFLOW_FILES=$(find .github/workflows -name "*.md" | sort)
+
+          for f in $WORKFLOW_FILES; do
+            echo "── Checking: $f"
+
+            python3 - "$f" <<'PYEOF'
+import sys, re, yaml
+
+filepath = sys.argv[1]
+content = open(filepath).read()
+
+# Extract YAML frontmatter between first and second ---
+match = re.match(r'^---\n([\s\S]*?)\n---', content)
+if not match:
+    print("  ❌ FAIL: No YAML frontmatter found")
+    sys.exit(1)
+
+try:
+    data = yaml.safe_load(match.group(1))
+except yaml.YAMLError as e:
+    print(f"  ❌ YAML parse error: {e}")
+    sys.exit(1)
+
+# In PyYAML safe_load, the YAML key 'on' is parsed as boolean True
+# We check for 'name', True (=on), 'permissions', 'tools', 'safe-outputs'
+REQUIRED = ['name', True, 'permissions', 'tools', 'safe-outputs']
+REQUIRED_NAMES = {'name': 'name', True: 'on', 'permissions': 'permissions',
+                  'tools': 'tools', 'safe-outputs': 'safe-outputs'}
+ok = True
+for field in REQUIRED:
+    if not data.get(field):
+        print(f"  ❌ Missing required field: {REQUIRED_NAMES[field]}")
+        ok = False
+
+# Check workflow_dispatch is in 'on' triggers (key True in parsed data)
+triggers = data.get(True, {})
+if isinstance(triggers, dict) and 'workflow_dispatch' not in triggers:
+    print("  ❌ Missing workflow_dispatch trigger")
+    ok = False
+
+if ok:
+    print("  ✅ Valid")
+sys.exit(0 if ok else 1)
+PYEOF
+            if [ $? -ne 0 ]; then FAILED=1; fi
+
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo ""
+            echo "❌ One or more workflow files failed validation."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All workflow files passed validation."
+
+  validate-labels:
+    name: Validate label consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install pyyaml --quiet
+
+      - name: Check all safe-output labels are in the setup script
+        run: |
+          set -euo pipefail
+
+          USED_LABELS=$(python3 - <<'PYEOF'
+import os, re, yaml
+
+labels = set()
+for fname in sorted(os.listdir('.github/workflows')):
+    if not fname.endswith('.md'):
+        continue
+    content = open(f'.github/workflows/{fname}').read()
+    match = re.match(r'^---\n([\s\S]*?)\n---', content)
+    if not match:
+        continue
+    try:
+        data = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        continue
+    so = data.get('safe-outputs') or {}
+    for val in so.values():
+        if not isinstance(val, dict):
+            continue
+        for key in ('allowlist', 'label-allowlist'):
+            lst = val.get(key)
+            if isinstance(lst, list):
+                labels.update(lst)
+
+print('\n'.join(sorted(labels)))
+PYEOF
+)
+
+          echo "Labels referenced in workflow safe-outputs:"
+          echo "$USED_LABELS"
+          echo ""
+
+          # Check each label exists in README (label creation section)
+          MISSING=0
+          while IFS= read -r label; do
+            [ -z "$label" ] && continue
+            if ! grep -q "\"${label}\"" README.md; then
+              echo "⚠️  Label '${label}' used in safe-outputs but not found in README label setup"
+              MISSING=1
+            fi
+          done <<< "$USED_LABELS"
+
+          if [ $MISSING -eq 0 ]; then
+            echo "✅ All labels are documented in README."
+          fi
+          # This is a warning only, not a hard failure
+          exit 0
+
+  validate-secrets:
+    name: Validate secrets documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets are documented in README and devcontainer.json
+        run: |
+          set -euo pipefail
+          FAILED=0
+
+          SECRETS=("WORKIQ_TENANT_ID" "WORKIQ_CLIENT_ID" "WORKIQ_REFRESH_TOKEN" "PROJECT_NUMBER")
+
+          for secret in "${SECRETS[@]}"; do
+            echo "Checking: $secret"
+
+            if ! grep -q "$secret" README.md; then
+              echo "  ❌ '$secret' not found in README.md"
+              FAILED=1
+            else
+              echo "  ✅ Found in README.md"
+            fi
+
+            if ! grep -q "$secret" .devcontainer/devcontainer.json; then
+              echo "  ❌ '$secret' not found in .devcontainer/devcontainer.json"
+              FAILED=1
+            else
+              echo "  ✅ Found in devcontainer.json"
+            fi
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo ""
+            echo "❌ Secret documentation is incomplete."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All secrets are documented."
